@@ -1,0 +1,13 @@
+{
+  "name": "pickard-ssow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pickard Event Services: SSOW & SOP read-and-sign website (Cloudflare Workers + D1 + R2)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.140.0"
+  }
+}
