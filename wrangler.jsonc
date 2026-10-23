@@ -1,5 +1,5 @@
 // Cloudflare settings for the Pickard SSOW & SOPs website.
-// You don't need to change anything here: Cloudflare creates the database automatically the first time it deploys.
+// Already set up for Pickard's Cloudflare account: no changes needed.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pickard-ssow",
@@ -14,11 +14,12 @@
   },
 
   // Database: documents, settings, people, sign-offs and uploaded files.
-  // Created automatically on first deploy (no ID needed).
+  // This is the "pes_ssow" database already created in Pickard's Cloudflare account.
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "pickard-ssow"
+      "database_name": "pes_ssow",
+      "database_id": "bd40b9ce-a35f-4102-ae03-cbbab2d4808c"
     }
   ],
 
