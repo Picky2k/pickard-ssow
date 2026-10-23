@@ -1,5 +1,5 @@
 // Cloudflare settings for the Pickard SSOW & SOPs website.
-// The only line you need to change is "database_id" below (see README step 4).
+// You don't need to change anything here: Cloudflare creates the database automatically the first time it deploys.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pickard-ssow",
@@ -13,24 +13,16 @@
     "run_worker_first": true
   },
 
-  // Database: documents, settings, people and sign-offs.
+  // Database: documents, settings, people, sign-offs and uploaded files.
+  // Created automatically on first deploy (no ID needed).
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "pickard-ssow",
-      "database_id": "PASTE-YOUR-D1-DATABASE-ID-HERE"
+      "database_name": "pickard-ssow"
     }
   ],
 
-  // Private file storage: licences, insurance certificates and risk assessments.
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "pickard-uploads"
-    }
-  ],
-
-  // Keep the admin settings (ACCESS_TEAM_DOMAIN, ACCESS_AUD) that you set in the Cloudflare dashboard.
+  // Keep the settings and secrets (such as ADMIN_PASSWORD) that you add in the Cloudflare dashboard.
   "keep_vars": true,
 
   "observability": { "enabled": true }

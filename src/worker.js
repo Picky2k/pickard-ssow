@@ -3,7 +3,7 @@
  *
  * Serves the website (from /public) and a small JSON API backed by:
  *   DB    – Cloudflare D1 database (documents, settings, people, sign-offs)
- *   FILES – Cloudflare R2 bucket (uploaded licences, PLI certificates, risk assessments)
+ *   (uploaded licences, PLI certificates and risk assessments are stored in the same database, in pieces)
  *
  * Staff:  https://<site>/        – no login; each person gets a private token stored on their device
  * Office: https://<site>/admin   – protected by Cloudflare Access (recommended) or an ADMIN_PASSWORD secret
@@ -31,6 +31,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, person_id TEXT NOT NULL, created_at TEXT)`,
   `CREATE INDEX IF NOT EXISTS tokens_person ON tokens (person_id)`,
   `CREATE TABLE IF NOT EXISTS attempts (ip TEXT NOT NULL, ts INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS file_parts (person_id TEXT NOT NULL, fid TEXT NOT NULL, part INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (person_id, fid, part))`,
 ];
 let ready = null;
 function ensureDb(env) {
@@ -178,6 +179,22 @@ function adminMode(env) {
   return env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD ? (env.ADMIN_PASSWORD ? "access+password" : "access") : env.ADMIN_PASSWORD ? "password" : "none";
 }
 
+/* ------------------------------------------------------------------ file storage (in D1, as base64 pieces) */
+const PART_CHARS = 900_000; // keeps each database row well under D1's 2 MB limit
+function bytesToB64(bytes) { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
+function b64ToBytes(b64) { const bin = atob(b64); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+async function putFile(env, personId, fid, bytes) {
+  const b64 = bytesToB64(bytes); const stmts = [];
+  for (let i = 0, part = 0; i < b64.length || part === 0; i += PART_CHARS, part++)
+    stmts.push(env.DB.prepare("INSERT INTO file_parts (person_id, fid, part, data) VALUES (?, ?, ?, ?)").bind(personId, fid, part, b64.slice(i, i + PART_CHARS)));
+  await env.DB.batch(stmts);
+}
+async function getFile(env, personId, fid) {
+  const { results } = await env.DB.prepare("SELECT data FROM file_parts WHERE person_id = ? AND fid = ? ORDER BY part").bind(personId, fid).all();
+  return results.length ? b64ToBytes(results.map((r) => r.data).join("")) : null;
+}
+const deleteFile = (env, personId, fid) => env.DB.prepare("DELETE FROM file_parts WHERE person_id = ? AND fid = ?").bind(personId, fid).run();
+
 /* ------------------------------------------------------------------ rate limiting (return-by-name) */
 async function checkAttempts(env, ip) {
   const since = Date.now() - 15 * 60_000;
@@ -260,14 +277,12 @@ async function apiUpload(request, env) {
   const ext = (String(file.name).match(/\.([a-z0-9]{2,5})$/i)?.[1] || "").toLowerCase();
   if (!UPLOAD_TYPES[ext]) bad("Use a PDF, a JPG or PNG photo, or a Word .docx file.");
   const fid = "f" + Date.now().toString(36) + randomHex(3);
-  await env.FILES.put(`people/${id}/${fid}`, file.stream(), { httpMetadata: { contentType: UPLOAD_TYPES[ext] } });
   const m = { kind, name: str(file.name, 160), mime: UPLOAD_TYPES[ext], size: file.size, uploadedAt: new Date().toISOString() };
   if (kind === "pli") Object.assign(m, { insurer: str(meta.insurer, 120), policyNo: str(meta.policyNo, 80), cover: str(meta.cover, 60), expiry: str(meta.expiry, 10) });
   else if (kind === "ra") Object.assign(m, { title: str(meta.title, 160), raDate: str(meta.raDate, 10) });
   else Object.assign(m, { title: str(meta.title, 160), licNo: str(meta.licNo, 80), expiry: str(meta.expiry, 10) });
-  if ((kind === "pli" || (kind.startsWith("lic-") && kind !== "lic-electrical")) && !/^\d{4}-\d{2}-\d{2}$/.test(m.expiry)) {
-    await env.FILES.delete(`people/${id}/${fid}`); bad("Enter the expiry date.");
-  }
+  if ((kind === "pli" || (kind.startsWith("lic-") && kind !== "lic-electrical")) && !/^\d{4}-\d{2}-\d{2}$/.test(m.expiry)) bad("Enter the expiry date.");
+  await putFile(env, id, fid, new Uint8Array(await file.arrayBuffer()));
   p.files = { ...(p.files || {}), [fid]: m };
   await savePerson(env, id, p);
   return json({ person: publicPerson(id, p) }, 201);
@@ -276,7 +291,7 @@ async function apiDeleteMyFile(request, env, fid) {
   const { id, p } = await personFromToken(request, env);
   if (!p.files?.[fid]) throw new HttpError(404, "File not found.");
   p.files[fid] = { ...p.files[fid], deleted: true, deletedAt: new Date().toISOString() };
-  await env.FILES.delete(`people/${id}/${fid}`);
+  await deleteFile(env, id, fid);
   await savePerson(env, id, p);
   return json({ person: publicPerson(id, p) });
 }
@@ -306,13 +321,8 @@ async function apiAdminPeople(env) {
   return json({ people: results.map((r) => publicPerson(r.id, JSON.parse(r.json))) });
 }
 async function apiAdminDeletePerson(env, id) {
-  let cursor;
-  do {
-    const list = await env.FILES.list({ prefix: `people/${id}/`, cursor });
-    if (list.objects.length) await env.FILES.delete(list.objects.map((o) => o.key));
-    cursor = list.truncated ? list.cursor : undefined;
-  } while (cursor);
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM file_parts WHERE person_id = ?").bind(id),
     env.DB.prepare("DELETE FROM tokens WHERE person_id = ?").bind(id),
     env.DB.prepare("DELETE FROM people WHERE id = ?").bind(id),
   ]);
@@ -332,9 +342,9 @@ async function apiAdminFile(env, id, fid) {
   const p = await loadPerson(env, id);
   const m = p?.files?.[fid];
   if (!m || m.deleted) throw new HttpError(404, "File not found.");
-  const obj = await env.FILES.get(`people/${id}/${fid}`);
-  if (!obj) throw new HttpError(404, "File not found.");
-  return new Response(obj.body, { headers: {
+  const bytes = await getFile(env, id, fid);
+  if (!bytes) throw new HttpError(404, "File not found.");
+  return new Response(bytes, { headers: {
     "content-type": m.mime || "application/octet-stream", "cache-control": "private, no-store",
     "content-disposition": `attachment; filename="${String(m.name).replace(/[^\w.\- ()]/g, "_")}"`,
   } });
@@ -345,6 +355,10 @@ async function handleApi(request, env, url) {
   const path = url.pathname.replace(/\/+$/, ""); const method = request.method;
   await ensureDb(env);
 
+  if (path === "/api/health") {
+    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM documents").first();
+    return json({ ok: true, database: "connected", documents: n?.n || 0, adminLogin: adminMode(env) === "none" ? "NOT SET UP - add the ADMIN_PASSWORD secret" : adminMode(env) });
+  }
   if (path === "/api/bootstrap" && method === "GET") return apiBootstrap(env);
   if (path === "/api/people" && method === "POST") return apiCreatePerson(request, env);
   if (path === "/api/me" && method === "GET") { const { id, p } = await personFromToken(request, env); return json({ person: publicPerson(id, p) }); }
@@ -383,6 +397,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
+      if (!env.DB) return fail(500, "The website isn't connected to its database yet. See step 3 in the README.");
       try { return await handleApi(request, env, url); }
       catch (e) {
         if (e instanceof HttpError) return fail(e.status, e.message, e.extra);

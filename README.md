@@ -2,116 +2,125 @@
 
 The read-and-sign website for Pickard Event Services' Safe Systems of Work (SSOWs) and Standard Operating Procedures (SOPs).
 
-- **Staff, sub-contractors and agency workers** go to the main address (for example `https://safety.pickardonline.co.uk`). They don't need an account: they enter their details, read each document for the minimum time, tick the declaration and sign. Their phone or tablet remembers them, and on another device they come back with their name and the last 3 digits of their mobile.
-- **The office** goes to `/admin` (for example `https://safety.pickardonline.co.uk/admin`) to see sign-off records, people, licences and insurance, to add or update documents, and to download the spreadsheet.
+- **Staff, sub-contractors and agency workers** use the main address. They don't need an account: they enter their details, read each document for the minimum time, tick the declaration and sign. Their phone or tablet remembers them, and on another device they come back with their name and the last 3 digits of their mobile.
+- **The office** uses the same address with `/admin` on the end to see sign-off records, people, licences and insurance, to add or update documents, and to download the spreadsheet.
 
-It runs on Cloudflare's free plan:
-
-| Part | Cloudflare product | What it holds |
-|---|---|---|
-| Website and server code | **Workers** | `public/` (the page) and `src/worker.js` (the server) |
-| Database | **D1** | Documents, settings, people, sign-offs and signatures |
-| File storage | **R2** (private) | Uploaded licences, insurance certificates and risk assessments |
-| Admin login | **Access** (Zero Trust) | Who may open `/admin` |
-
-The 22 current SSOWs/SOPs and your settings are built in, and they load automatically the first time the site runs. People who signed in the Claude version are **not** moved across.
+It runs on Cloudflare's free plan. Cloudflare creates the database automatically, and the 22 current SSOWs/SOPs and your settings load the first time the site runs.
 
 ---
 
-## Setting it up (about 30 minutes)
+## Setting it up: a step-by-step guide for beginners
 
-### 1. Put the code on GitHub
-If the files aren't already in `github.com/Picky2k/pickard-ssow`, open the repository, choose **Add file → Upload files**, drag in everything from this folder (including the `public` and `src` folders) and press **Commit changes**. Keep the repository **private**.
+You need about 20 minutes, your GitHub login (Picky2k) and an email address. No payment card is needed.
 
-### 2. Create a Cloudflare account
-Sign up at <https://dash.cloudflare.com>. The free plan is enough.
+### Step 0: Clear up any earlier attempt (skip this if it's your first go)
+In the Cloudflare dashboard:
+1. Click **Workers & Pages** in the left menu. If **pickard-ssow** is listed, click it, go to **Settings**, scroll to the bottom, click **Delete** and confirm.
+2. Click **Storage & databases → D1 SQL database**. If **pickard-ssow** is listed, click the **⋯** at the end of its row, choose **Delete** and confirm. It's empty, so nothing is lost.
+3. If you created an R2 bucket called **pickard-uploads**, you can delete it too. It's no longer used.
 
-### 3. Create the database
-1. In the Cloudflare dashboard, go to **Storage & databases → D1 SQL database → Create database**.
-2. Name it `pickard-ssow` and press **Create**.
-3. Copy the **Database ID**. It looks like `a1b2c3d4-…`.
-4. In GitHub, open `wrangler.jsonc` and press the pencil icon to edit it. Replace `PASTE-YOUR-D1-DATABASE-ID-HERE` with the ID you copied, then press **Commit changes**.
+### Step 1: Create a free Cloudflare account
+1. Go to **https://dash.cloudflare.com/sign-up**.
+2. Enter your email and a password, then confirm the email Cloudflare sends you.
+3. If it asks what you want to do, choose anything or skip. You'll end up on the dashboard **Account home** page.
 
-You don't need to create any tables. The site creates them itself.
+### Step 2: Put the website on Cloudflare, straight from GitHub
+1. In the left menu, click **Workers & Pages**. It may be under **Compute (Workers)**.
+2. Click the blue **Create application** button (top right).
+3. Find **Import a repository** and click **Get started** next to it.
+4. Click **Connect GitHub**, or choose GitHub as the **Git account**. A GitHub window opens:
+   - Sign in as **Picky2k** if asked.
+   - Choose **Only select repositories**, pick **pickard-ssow**, then click **Install & Authorize**.
+5. Back in Cloudflare, click **pickard-ssow** in the list of repositories.
+6. On the settings page:
+   - **Project name:** it must be exactly `pickard-ssow`.
+   - Leave **Build command** blank and **Deploy command** as `npx wrangler deploy`.
+   - Leave everything else as it is.
+7. Click **Create and deploy** (or **Save and Deploy**).
+8. Wait 1–3 minutes while it builds. When it says **Success**, it shows your website address, something like `https://pickard-ssow.yourname.workers.dev`. Copy it somewhere safe.
 
-### 4. Create the file storage
-1. Go to **Storage & databases → R2 object storage**. Cloudflare asks for a payment card the first time you turn on R2, even on the free allowance.
-2. Press **Create bucket**, name it `pickard-uploads`, and leave everything else as it is. The bucket stays private: files can only be downloaded through the admin area.
+### Step 3: Check it's working
+1. Open your address with `/api/health` on the end, for example `https://pickard-ssow.yourname.workers.dev/api/health`.
+2. You should see a line of text containing `"database":"connected"`, `"documents":22` and `"adminLogin":"NOT SET UP..."`. That's correct for now.
+3. Open the main address (without `/api/health`). You should see the Pickard logo and **Read. Understand. Sign.**
 
-### 5. Connect GitHub and deploy
-1. Go to **Compute → Workers & Pages → Create → Import a repository**.
-2. Connect your GitHub account and pick **Picky2k/pickard-ssow**.
-3. Keep the project name **pickard-ssow**. It must match the name in `wrangler.jsonc`. Leave the build settings as they are (deploy command `npx wrangler deploy`) and press **Deploy**.
-4. When it finishes you get an address like `https://pickard-ssow.<your-account>.workers.dev`. Open it and you should see the Read. Understand. Sign. page.
+**If the build failed or the health check shows an error,** see [Problems](#problems) below.
 
-From now on, every change committed to GitHub is deployed automatically within a minute or two.
+### Step 4: Set the admin password
+1. In Cloudflare, go to **Workers & Pages** and click **pickard-ssow**.
+2. Click the **Settings** tab, then find **Variables and Secrets** and click **+ Add**.
+3. Fill in:
+   - **Type:** `Secret`
+   - **Variable name:** `ADMIN_PASSWORD`, typed exactly like that in capitals
+   - **Value:** a strong password that you and Mathew will use, for example three random words and a number
+4. Click **Deploy** (or **Save and deploy**).
+5. Open your address with `/admin` on the end. Type the password and you're in.
 
-### 6. Give it your own address (recommended)
-1. Your domain (for example `pickardonline.co.uk`) needs to be on Cloudflare: **Add a domain**, then follow the steps to change the nameservers at your registrar. **Check that your email (MX) records were copied across** before you switch, or email will stop.
-2. Open the Worker, then go to **Settings → Domains & Routes → Add → Custom domain** and enter `safety.pickardonline.co.uk`.
+### Step 5: Try it out
+1. On your phone, open the main address. Register as a test sub-contractor, tick **Van driving**, upload any photo as a test licence, and read and sign one document.
+2. On your computer, open `/admin`. Your test person should appear with the signed document. Try **Download spreadsheet (.xlsx)**.
+3. On the **People** tab, delete the test person.
+4. Share the main address with your workforce, for example as a QR code on the noticeboard or in a WhatsApp group.
 
-### 7. Lock the admin area
-You need **one** of these. Option B is better. Option A gets you going in two minutes.
+That's it: the system is live.
 
-**Option A: a shared admin password**
-1. Open the Worker, then go to **Settings → Variables and Secrets → Add**.
-2. Type: **Secret**. Name: `ADMIN_PASSWORD`. Value: a long password. Save.
-3. Go to `/admin` and sign in with it. To change the password later, edit the secret.
+---
 
-**Option B: Cloudflare Access (each person logs in with their own work email)**
-1. In the dashboard, open **Zero Trust**. The first time, choose a team name (for example `pickard`) and the **Free** plan.
-2. Go to **Access → Applications → Add an application → Self-hosted**.
-3. Add **two** public hostnames:
-   - `safety.pickardonline.co.uk` with path `admin`
-   - `safety.pickardonline.co.uk` with path `api/admin`
-4. Add a policy: Action **Allow**, Include **Emails**, then list the people who should have admin access (for example `james@pickardonline.co.uk`, `matt@pickardonline.co.uk`).
-5. Under login methods, make sure **One-time PIN** is on.
-6. Save. Then open the application's **Overview** and copy the **Application Audience (AUD) Tag**.
-7. Back on the Worker, go to **Settings → Variables and Secrets** and add two **Text** variables:
-   - `ACCESS_TEAM_DOMAIN`: `pickard.cloudflareaccess.com` (use your own team name)
-   - `ACCESS_AUD`: the AUD tag you copied
-8. Open `/admin`. Cloudflare asks for your email, sends a code, and then lets you in.
+## Later, optional: a nicer address and named logins
 
-Once you're using your own domain, turn off the `workers.dev` address under **Settings → Domains & Routes**. Admin data stays protected either way, because the server checks the Access login itself, but one address is tidier.
+**Your own address (for example `safety.pickardonline.co.uk`)**
+This needs your domain to be managed by Cloudflare, which means changing nameservers at your domain registrar. Check your email (MX) records are copied across first, or email will stop. Once the domain is on Cloudflare, go to **Workers & Pages → pickard-ssow → Settings → Domains & Routes → + Add → Custom domain** and type `safety.pickardonline.co.uk`.
 
-### 8. Check it works
-1. On your phone, open the main address, register as a test sub-contractor, tick an activity, upload a test licence and sign one document.
-2. In `/admin`, check the test person appears with the signed document, the licence and the PLI status, and that **Download spreadsheet** works.
-3. Delete the test person on the **People** tab.
-4. Share the address with your workforce, for example as a QR code on the noticeboard or in a WhatsApp group.
+**Named admin logins with an emailed code (Cloudflare Access)**
+Once the site is on your own address, you can replace the shared password with per-person logins:
+1. **Zero Trust → Access controls → Applications → Create new application → Self-hosted and private.**
+2. Add two public hostnames: `safety.pickardonline.co.uk` with path `admin`, and the same with path `api/admin`.
+3. Policy: **Allow**, **Emails**, then list the admin addresses. Login method: **One-time PIN**.
+4. Copy the application's **AUD tag**. On the Worker, add two **Text** variables: `ACCESS_AUD` (the tag) and `ACCESS_TEAM_DOMAIN` (for example `pickard.cloudflareaccess.com`, shown under **Zero Trust → Settings**).
+
+---
+
+## Problems
+
+**The build failed and the log mentions the database (D1)**
+Cloudflare normally creates the database itself. If it couldn't:
+1. Go to **Storage & databases → D1 SQL database → Create database**, name it `pickard-ssow`, and click **Create**.
+2. Copy its **Database ID**.
+3. On GitHub, open `wrangler.jsonc` and click the pencil icon. Under `"database_name": "pickard-ssow"`, add a comma and a new line `"database_id": "PASTE-ID-HERE"`, then click **Commit changes**. Cloudflare rebuilds automatically.
+
+**"The website isn't connected to its database yet"**
+Same fix as above.
+
+**The build failed with "name mismatch" or similar**
+The project name in Cloudflare must be `pickard-ssow`. Delete the Worker (Step 0) and import it again.
+
+**`/admin` says "Admin access isn't set up yet"**
+Do Step 4. Check the variable name is exactly `ADMIN_PASSWORD` and that you clicked **Deploy** afterwards.
+
+**I forgot the admin password**
+Repeat Step 4 with a new value. It replaces the old one.
 
 ---
 
 ## Day to day
 
-- **New or amended SSOW/SOP:** in `/admin → Documents`, drag in the Word files. Check the list, then press **Publish**. Raise the version number and everyone who signed the old one is asked to sign again. The **Email people** panel gives you the addresses and a ready-made message.
-- **Reading speed and renewals:** `/admin → Settings`. The site starts at **600 words per minute**, which is what the Claude version was set to. 250 is a careful reading pace, so lower it if people are signing too quickly.
-- **Office tablet:** open the main address. Each person taps **Finish & switch person** when they're done.
-- **Backups:** download the spreadsheet regularly. D1 also keeps a restore history (**D1 → your database → Time Travel**).
+- **New or amended SSOW/SOP:** in `/admin → Documents`, drag in the Word files, check the list, then click **Publish**. Raise the version number and everyone who signed the old one is asked to sign again. The **Email people** panel gives you the addresses and a ready-made message.
+- **Reading speed and renewals:** `/admin → Settings`. The site starts at **600 words per minute**, which is what the Claude version was set to. 250 is a careful reading pace.
+- **Office tablet:** open the main address. Each person taps **Finish & switch person** when done.
+- **Backups:** download the spreadsheet regularly. Cloudflare also keeps a restore history of the database (**Storage & databases → D1 → pickard-ssow → Time Travel**).
+- **Changing the website:** edit files on GitHub, or ask Claude to. Every change on the `main` branch redeploys within a couple of minutes. Documents and sign-offs live in the database, so code changes don't touch them.
 
-## Changing the code
-Edit files directly on GitHub (pencil icon) or ask Claude to make changes. Each commit to the `main` branch redeploys. Your documents and sign-offs live in the D1 database, so code updates don't touch them.
-
-To run it on your own computer (optional, needs Node.js):
-```
-npm install
-echo ADMIN_PASSWORD=test > .dev.vars
-npm run dev        # then open http://localhost:8787 and http://localhost:8787/admin
-```
-
-## How it fits together
+## What's in this repository
 
 ```
 public/index.html   The whole page: staff screens and admin screens
 public/logo.jpg     Company logo
 src/worker.js       Server: API, database set-up, admin checks, file storage
 src/seed.json       The SSOWs/SOPs and settings loaded into a new database
-wrangler.jsonc      Cloudflare settings (database ID goes here)
+wrangler.jsonc      Cloudflare settings (no changes needed)
 ```
 
-**API summary** (all under `/api`):
-- Staff: `GET bootstrap`, `POST people`, `GET/PATCH me`, `POST me/progress`, `POST me/sign`, `POST me/files`, `DELETE me/files/:id`, `POST return`
-- Admin (Access or password): `GET admin/whoami`, `GET admin/people`, `DELETE admin/people/:id`, `GET admin/documents`, `PUT/DELETE admin/documents/:ref`, `PUT admin/settings`, `GET admin/files/:person/:file`
+To run it on your own computer (optional, needs Node.js): `npm install`, create a file `.dev.vars` containing `ADMIN_PASSWORD=test`, then `npm run dev` and open http://localhost:8787.
 
 ## Privacy
-The site stores names, phone numbers, emails, signatures, and copies of driving licences, licence cards and insurance certificates. Uploads sit in a private R2 bucket and can only be downloaded through the admin area. Mention this in your privacy notice, decide how long you keep records for people who have left, and use **Delete** on the People tab to remove them. Deleting a person also deletes their uploaded files.
+The site stores names, phone numbers, emails, signatures, and copies of licences and insurance certificates. Uploaded files can only be downloaded through the admin area. Mention this in your privacy notice, decide how long you keep records for people who have left, and use **Delete** on the People tab to remove them. Deleting a person also deletes their uploaded files.
