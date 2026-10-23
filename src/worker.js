@@ -357,7 +357,7 @@ async function handleApi(request, env, url) {
 
   if (path === "/api/health") {
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM documents").first();
-    return json({ ok: true, database: "connected", documents: n?.n || 0, adminLogin: adminMode(env) === "none" ? "NOT SET UP - add the ADMIN_PASSWORD secret" : adminMode(env) });
+    return json({ ok: true, database: "connected", documents: n?.n || 0, adminAccess: adminMode(env) === "none" ? "NOT SET UP - add the ADMIN_PASSWORD secret" : adminMode(env) === "password" ? "protected by admin password" : "protected by Cloudflare Access" });
   }
   if (path === "/api/bootstrap" && method === "GET") return apiBootstrap(env);
   if (path === "/api/people" && method === "POST") return apiCreatePerson(request, env);

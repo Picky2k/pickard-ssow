@@ -41,7 +41,7 @@ In the Cloudflare dashboard:
 
 ### Step 3: Check it's working
 1. Open your address with `/api/health` on the end, for example `https://pickard-ssow.yourname.workers.dev/api/health`.
-2. You should see a line of text containing `"database":"connected"`, `"documents":22` and `"adminLogin":"NOT SET UP..."`. That's correct for now.
+2. You should see a line of text containing `"database":"connected"`, `"documents":22` and `"adminAccess":"NOT SET UP..."`. That's correct for now. After Step 4 it says `"protected by admin password"`.
 3. Open the main address (without `/api/health`). You should see the Pickard logo and **Read. Understand. Sign.**
 
 **If the build failed or the health check shows an error,** see [Problems](#problems) below.
