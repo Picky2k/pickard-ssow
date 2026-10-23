@@ -6,6 +6,9 @@
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
 
+  // Give the site a free https://pickard-ssow.<your-subdomain>.workers.dev address.
+  "workers_dev": true,
+
   // The website files in /public. The server code runs first so it can handle /api and /admin.
   "assets": {
     "directory": "./public",
