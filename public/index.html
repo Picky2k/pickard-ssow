@@ -472,7 +472,7 @@ async function downloadFile(key, fid) {
   const p = S.people.find((x) => x.key === key) || (S.personKey === key ? S.person : null); const f = p?.files?.[fid]; if (!f) return;
   toast(`Preparing ${f.name}…`);
   try {
-    const headers = {}; const pw = ssGet(ADMIN_PW_KEY); if (pw) headers["x-admin-password"] = pw;
+    const headers = {}; const pw = ssGet(ADMIN_PW_KEY); if (pw) headers["x-admin-password"] = encodeURIComponent(pw);
     const res = await fetch(`/api/admin/files/${encodeURIComponent(key)}/${encodeURIComponent(fid)}`, { headers, credentials: "same-origin" });
     if (!res.ok) throw new Error(res.status === 404 ? "the file is missing" : "the server refused");
     const ext = fileExt(f.name, f.mime);
@@ -488,7 +488,7 @@ function setToken(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStora
 async function api(path, { method = "GET", body, form, keepalive } = {}) {
   const headers = {};
   const t = getToken(); if (t) headers["x-person-token"] = t;
-  const pw = ssGet(ADMIN_PW_KEY); if (pw && path.startsWith("/api/admin")) headers["x-admin-password"] = pw;
+  const pw = ssGet(ADMIN_PW_KEY); if (pw && path.startsWith("/api/admin")) headers["x-admin-password"] = encodeURIComponent(pw);
   let payload;
   if (form) payload = form;
   else if (body !== undefined) { headers["content-type"] = "application/json"; payload = JSON.stringify(body); }
@@ -1553,7 +1553,7 @@ function lockHTML() {
 async function tryUnlock(e) {
   e.preventDefault(); const err = $("#unlockErr"); const btn = $("#unlockBtn");
   btn.disabled = true; btn.textContent = "Checking…";
-  ssSet(ADMIN_PW_KEY, $("#unlock-pw").value);
+  ssSet(ADMIN_PW_KEY, $("#unlock-pw").value.trim());
   try { const w = await api("/api/admin/whoami"); S.adminOk = true; S.adminWho = w; $("#main").innerHTML = ""; await loadAdminData(); renderAdmin(); }
   catch (ex) {
     ssSet(ADMIN_PW_KEY, null); btn.disabled = false; btn.textContent = "Sign in";

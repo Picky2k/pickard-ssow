@@ -170,8 +170,10 @@ async function adminIdentity(request, env) {
     if (t) { try { const who = await verifyAccessJwt(t, env); if (who) return who; } catch {} }
   }
   if (env.ADMIN_PASSWORD) {
-    const given = request.headers.get("x-admin-password");
-    if (given && timingSafeEqual(given, env.ADMIN_PASSWORD)) return { email: "", via: "password" };
+    let given = request.headers.get("x-admin-password");
+    if (given) { try { given = decodeURIComponent(given); } catch {} }
+    // ignore stray spaces or line breaks pasted into either the dashboard or the login box
+    if (given && timingSafeEqual(given.trim(), String(env.ADMIN_PASSWORD).trim())) return { email: "", via: "password" };
   }
   return null;
 }
